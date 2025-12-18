@@ -42,7 +42,7 @@ RSS Sources → Merge (Append) → Deduplication (JS) → Loop → Regex Filter 
 
 ### Tech Stack
 * **Workflow Engine:** [n8n](https://n8n.io/) (Self-hosted or Cloud)
-* **AI Model:** Google Gemini 1.5 Flash (Fast, accurate, and cost-effective)
+* **AI Model:** Google Gemini 2.5 Flash (Fast, accurate, and cost-effective)
 * **Scripting:** JavaScript (Node.js)
 * **Database:** Google Sheets
 
