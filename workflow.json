@@ -1,0 +1,496 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1088,
+        16
+      ],
+      "id": "4a5b8d0d-65f5-4d95-836a-98e575925dff",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemma-3-27b-it",
+          "mode": "list",
+          "cachedResultName": "models/gemma-3-27b-it"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a Job Filter for a student in Bangalore, India.\nACCEPTABLE LOCATIONS: \"Bangalore\", \"Bengaluru\", \"Remote (India)\", \"Remote (Worldwide)\".\nREJECT LOCATIONS: \"USA only\", \"UK only\", \"Europe only\", \"On-site Delhi/Mumbai\" (unless Remote is an option).\n\nJob Title: {{ $json.job_title }}\nDescription snippet: {{ $json.job_description }}\n\nTask:\n1. Extract Salary if found (e.g. \"₹20k/mo\").\n2. Check Location eligibility.\n3. Score (0-100).\n   - 0 if location is NOT Bangalore or Remote.\n   - 0 if not a Security/Tech role (e.g. reject \"Legal Intern\").\n   - 100 for \"Cyber Security Intern\" in \"Bangalore\".\n\nOutput JSON ONLY:\n{\n  \"score\": number,\n  \"salary\": \"string\",\n  \"location_status\": \"string (e.g. 'Bangalore', 'USA-Rejected')\",\n  \"analysis\": \"string (max 10 words)\"\n}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        192,
+        -64
+      ],
+      "id": "96f56a27-bd55-4666-be82-c6889de71307",
+      "name": "Message a model",
+      "retryOnFail": true,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "OcoZ9gzxn6wt9ZHo",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a6a87e78-27a5-4dc2-af2b-6d8b3f3a08f0",
+              "name": "resume",
+              "value": ""value": "Name: [Your Name] Role: [Your Role] | SIEM & SOAR Engineering Summary: [Brief description of your skills and experience relevant to the job search]"",
+              "type": "string"
+            },
+            {
+              "id": "88e4b722-27e4-4df2-9ee7-ae5e8384c805",
+              "name": "job_title",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "8ca84b38-6986-44c4-8ab3-806f9d59eb97",
+              "name": "job_description",
+              "value": "={{ $json.content }}",
+              "type": "string"
+            },
+            {
+              "id": "dc84b2d9-0f39-42c3-bde6-fb0b5de83aec",
+              "name": "link",
+              "value": "={{ $json.link }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        -64
+      ],
+      "id": "ea56b937-29b5-43a8-8a71-eec684ea8bcc",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Change 'Edit Fields' to 'Merge' if that's your previous node name!\nconst originalItems = $('Merge').all(); \n\nconst results = items.map((item, index) => {\n  try {\n    const rawContent = item.json.content.parts[0].text;\n    const cleanJson = rawContent.replace(/^```json\\s*/, \"\").replace(/\\s*```$/, \"\");\n    const parsedData = JSON.parse(cleanJson);\n\n    // Get Original Link from Google News feed\n    const originalItem = originalItems[index] ? originalItems[index].json : {};\n    \n    // Google News links are often \"google.com/url?...\" \n    // This is fine, but sometimes you might want the source. \n    // For now, the direct link works.\n    \n    return {\n      json: {\n        status: \"Saved\",\n        score: parsedData.score,\n        job: originalItem.title || \"Unknown\",\n        location: parsedData.location_status, // <--- NEW CHECK\n        salary: parsedData.salary || \"Not Listed\",\n        analysis: parsedData.analysis,\n        link: originalItem.link || originalItem.guid\n      }\n    };\n\n  } catch (error) {\n    return { json: { status: \"Error\", error: error.message } };\n  }\n});\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        -64
+      ],
+      "id": "72e100b5-56bf-46f7-91c1-70baca409ce3",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -400,
+        -32
+      ],
+      "id": "900a5be4-ddd1-4f25-9812-99678125f2ef",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_URL_HERE",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Score": "={{ $json.score }}",
+            "Job Title": "={{ $json.job }}",
+            "Analysis": "={{ $json.analysis }}",
+            "Link": "={{ $json.link }}"
+          },
+          "matchingColumns": [
+            "Job Title"
+          ],
+          "schema": [
+            {
+              "id": "Job Title",
+              "displayName": "Job Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Score",
+              "displayName": "Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Salary",
+              "displayName": "Salary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Analysis",
+              "displayName": "Analysis",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Link",
+              "displayName": "Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        848,
+        32
+      ],
+      "id": "e6dfd3d5-c061-4337-912a-09080a6ee02b",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "6LfqqwIaTw1m7zKo",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://news.google.com/rss/search?q=Cyber+Security+Job+Bangalore+(Intern+OR+Junior+OR+Trainee)&hl=en-IN&gl=IN&ceid=IN:en",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -864,
+        -192
+      ],
+      "id": "87b4e1b4-7b0d-41a2-8e09-d39bb25de1b9",
+      "name": "RSS Read1"
+    },
+    {
+      "parameters": {
+        "url": "https://news.google.com/rss/search?q=Cyber+Security+Job+India+Remote+(Intern+OR+Junior)&hl=en-IN&gl=IN&ceid=IN:en",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -864,
+        -32
+      ],
+      "id": "c9d4a471-e355-42fa-b1f8-4700e537886c",
+      "name": "RSS Read2"
+    },
+    {
+      "parameters": {
+        "url": "https://news.google.com/rss/search?q=Cyber+Security+Internship+India&hl=en-IN&gl=IN&ceid=IN:en",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -864,
+        128
+      ],
+      "id": "34839169-6122-4a75-aa42-1c173274135f",
+      "name": "RSS Read3"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -656,
+        -48
+      ],
+      "id": "f4b63362-3904-4e78-ba14-2423495a3eb6",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2c2dc85c-fc70-46a4-aebd-d77d1aef7d19",
+              "leftValue": "={{ $json.title }}",
+              "rightValue": "/(Cyber|SOC|Blue\\s?Team|Red\\s?Team|Pentest|Penetration|Vulnerability|Threat|Security|InfoSec|SIEM|Forensic|Incident|Malware|AppSec|DevSecOps|Wazuh|Splunk)/i",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -224,
+        -48
+      ],
+      "id": "871b250f-22aa-47e5-af55-90184cf23dd9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// This removes duplicates based on the Title\nconst seen = new Set();\nconst uniqueItems = [];\n\nfor (const item of items) {\n  const title = item.json.title;\n  if (!seen.has(title)) {\n    seen.add(title);\n    uniqueItems.push(item);\n  }\n}\n\nreturn uniqueItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        288
+      ],
+      "id": "7bbc582e-1e19-4432-80e8-730c9977191e",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        496,
+        -64
+      ],
+      "id": "314d4d3d-2de8-438d-9114-ff1e784c0266",
+      "name": "Wait",
+      "webhookId": "6333788f-d203-494b-b6cf-0668d0c380df"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "RSS Read1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS Read2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS Read3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append or update row in sheet": {
+      "main": [
+        []
+      ]
+    },
+    "RSS Read1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Read3": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "RSS Read2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ab036c41-aee9-4901-9a6d-5ceb602368a1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "56317425a78aa9b37d01a0302726ae38870335162b7622917c854bb847deface"
+  },
+  "id": "au9k3vWcQ4GCr96M",
+  "tags": []
+}
